@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/pkg/errors"
 	"github.com/prometheus/tsdb/chunkenc"
@@ -502,6 +503,7 @@ func (s *baseChunkSeries) Next() bool {
 		lset     labels.Labels
 		chkMetas []chunks.Meta
 		err      error
+		mu       sync.RWMutex
 	)
 
 	for s.p.Next() {
@@ -517,7 +519,9 @@ func (s *baseChunkSeries) Next() bool {
 
 		s.lset = lset
 		s.chks = chkMetas
+		mu.RLock()
 		s.intervals, err = s.tombstones.Get(s.p.At())
+		mu.RUnlock()
 		if err != nil {
 			s.err = errors.Wrap(err, "get tombstones")
 			return false
