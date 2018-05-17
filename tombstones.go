@@ -22,6 +22,7 @@ import (
 	"path/filepath"
 
 	"github.com/pkg/errors"
+	"sync"
 )
 
 const tombstoneFilename = "tombstones"
@@ -107,10 +108,10 @@ type Stone struct {
 	intervals Intervals
 }
 
-func readTombstones(dir string) (memTombstones, error) {
+func readTombstones(dir string) (*memTombstones, error) {
 	b, err := ioutil.ReadFile(filepath.Join(dir, tombstoneFilename))
 	if os.IsNotExist(err) {
-		return memTombstones{}, nil
+		return newEmptyMemTombstones(), nil
 	} else if err != nil {
 		return nil, err
 	}
@@ -140,7 +141,7 @@ func readTombstones(dir string) (memTombstones, error) {
 		return nil, errors.New("checksum did not match")
 	}
 
-	stonesMap := memTombstones{}
+	stonesMap := newEmptyMemTombstones()
 
 	for d.len() > 0 {
 		k := d.uvarint64()
@@ -156,21 +157,38 @@ func readTombstones(dir string) (memTombstones, error) {
 	return stonesMap, nil
 }
 
-type memTombstones map[uint64]Intervals
+type memTombstones struct {
+	mts map[uint64]Intervals
+	mtx sync.RWMutex
+}
 
-var emptyTombstoneReader = memTombstones{}
+func newEmptyMemTombstones() *memTombstones {
+	mts := make(map[uint64]Intervals)
+	return &memTombstones{mts: mts}
+}
+
+func newMemTombstones(mts map[uint64]Intervals) *memTombstones {
+	return &memTombstones{mts: mts}
+}
+
+//var emptyTombstoneReader = memTombstones{}
+var emptyTombstoneReader = newEmptyMemTombstones()
 
 // EmptyTombstoneReader returns a TombstoneReader that is always empty.
 func EmptyTombstoneReader() TombstoneReader {
 	return emptyTombstoneReader
 }
 
-func (t memTombstones) Get(ref uint64) (Intervals, error) {
-	return t[ref], nil
+func (t *memTombstones) Get(ref uint64) (Intervals, error) {
+	t.mtx.RLock()
+	defer t.mtx.RUnlock()
+	return t.mts[ref], nil
 }
 
-func (t memTombstones) Iter(f func(uint64, Intervals) error) error {
-	for ref, ivs := range t {
+func (t *memTombstones) Iter(f func(uint64, Intervals) error) error {
+	t.mtx.Lock()
+	defer t.mtx.Unlock()
+	for ref, ivs := range t.mts {
 		if err := f(ref, ivs); err != nil {
 			return err
 		}
@@ -178,8 +196,16 @@ func (t memTombstones) Iter(f func(uint64, Intervals) error) error {
 	return nil
 }
 
-func (t memTombstones) add(ref uint64, itv Interval) {
-	t[ref] = t[ref].add(itv)
+func (t *memTombstones) add(ref uint64, itv Interval) {
+	t.mtx.Lock()
+	t.mts[ref] = t.mts[ref].add(itv)
+	t.mtx.Unlock()
+}
+
+func (t *memTombstones) put(ref uint64, itvs Intervals) {
+	t.mtx.Lock()
+	t.mts[ref] = itvs
+	t.mtx.Unlock()
 }
 
 func (memTombstones) Close() error {

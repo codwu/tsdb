@@ -29,7 +29,7 @@ func TestWriteAndReadbackTombStones(t *testing.T) {
 
 	ref := uint64(0)
 
-	stones := memTombstones{}
+	stones := newEmptyMemTombstones()
 	// Generate the tombstones.
 	for i := 0; i < 100; i++ {
 		ref += uint64(rand.Int31n(10)) + 1
@@ -40,7 +40,7 @@ func TestWriteAndReadbackTombStones(t *testing.T) {
 			dranges = dranges.add(Interval{mint, mint + rand.Int63n(1000)})
 			mint += rand.Int63n(1000) + 1
 		}
-		stones[ref] = dranges
+		stones.put(ref, dranges)
 	}
 
 	testutil.Ok(t, writeTombstoneFile(tmpdir, stones))
