@@ -29,7 +29,7 @@ func TestWriteAndReadbackTombStones(t *testing.T) {
 
 	ref := uint64(0)
 
-	stones := newEmptyMemTombstones()
+	stones := newMemTombstones()
 	// Generate the tombstones.
 	for i := 0; i < 100; i++ {
 		ref += uint64(rand.Int31n(10)) + 1

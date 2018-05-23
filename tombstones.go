@@ -21,8 +21,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/pkg/errors"
 	"sync"
+
+	"github.com/pkg/errors"
 )
 
 const tombstoneFilename = "tombstones"
@@ -111,7 +112,7 @@ type Stone struct {
 func readTombstones(dir string) (*memTombstones, error) {
 	b, err := ioutil.ReadFile(filepath.Join(dir, tombstoneFilename))
 	if os.IsNotExist(err) {
-		return newEmptyMemTombstones(), nil
+		return newMemTombstones(), nil
 	} else if err != nil {
 		return nil, err
 	}
@@ -141,7 +142,7 @@ func readTombstones(dir string) (*memTombstones, error) {
 		return nil, errors.New("checksum did not match")
 	}
 
-	stonesMap := newEmptyMemTombstones()
+	stonesMap := newMemTombstones()
 
 	for d.len() > 0 {
 		k := d.uvarint64()
@@ -151,7 +152,7 @@ func readTombstones(dir string) (*memTombstones, error) {
 			return nil, d.err()
 		}
 
-		stonesMap.add(k, Interval{mint, maxt})
+		stonesMap.addInterval(k, Interval{mint, maxt})
 	}
 
 	return stonesMap, nil
@@ -162,21 +163,8 @@ type memTombstones struct {
 	mtx sync.RWMutex
 }
 
-func newEmptyMemTombstones() *memTombstones {
-	mts := make(map[uint64]Intervals)
-	return &memTombstones{mts: mts}
-}
-
-func newMemTombstones(mts map[uint64]Intervals) *memTombstones {
-	return &memTombstones{mts: mts}
-}
-
-//var emptyTombstoneReader = memTombstones{}
-var emptyTombstoneReader = newEmptyMemTombstones()
-
-// EmptyTombstoneReader returns a TombstoneReader that is always empty.
-func EmptyTombstoneReader() TombstoneReader {
-	return emptyTombstoneReader
+func newMemTombstones() *memTombstones {
+	return &memTombstones{mts: make(map[uint64]Intervals)}
 }
 
 func (t *memTombstones) Get(ref uint64) (Intervals, error) {
@@ -196,16 +184,18 @@ func (t *memTombstones) Iter(f func(uint64, Intervals) error) error {
 	return nil
 }
 
-func (t *memTombstones) add(ref uint64, itv Interval) {
+// addInterval to an existing memTombstones
+func (t *memTombstones) addInterval(ref uint64, itv Interval) {
 	t.mtx.Lock()
 	t.mts[ref] = t.mts[ref].add(itv)
 	t.mtx.Unlock()
 }
 
-func (t *memTombstones) put(ref uint64, itvs Intervals) {
+func (t *memTombstones) put(ref uint64, itvs Intervals) *memTombstones {
 	t.mtx.Lock()
+	defer t.mtx.Unlock()
 	t.mts[ref] = itvs
-	t.mtx.Unlock()
+	return t
 }
 
 func (memTombstones) Close() error {
@@ -234,7 +224,7 @@ func (tr Interval) isSubrange(dranges Intervals) bool {
 // Intervals represents	a set of increasing and non-overlapping time-intervals.
 type Intervals []Interval
 
-// This adds the new time-range to the existing ones.
+// add the new time-range to the existing ones.
 // The existing ones must be sorted.
 func (itvs Intervals) add(n Interval) Intervals {
 	for i, r := range itvs {

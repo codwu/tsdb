@@ -749,7 +749,7 @@ func TestTombstoneClean(t *testing.T) {
 		}
 
 		for _, b := range db.blocks {
-			testutil.Equals(t, emptyTombstoneReader, b.tombstones)
+			testutil.Equals(t, newMemTombstones(), b.tombstones)
 		}
 	}
 }

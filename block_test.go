@@ -66,7 +66,7 @@ func createEmptyBlock(t *testing.T, dir string) *Block {
 
 	testutil.Ok(t, os.MkdirAll(chunkDir(dir), 0777))
 
-	testutil.Ok(t, writeTombstoneFile(dir, EmptyTombstoneReader()))
+	testutil.Ok(t, writeTombstoneFile(dir, newMemTombstones()))
 
 	b, err := OpenBlock(dir, nil)
 	testutil.Ok(t, err)
