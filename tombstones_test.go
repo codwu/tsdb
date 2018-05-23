@@ -17,6 +17,7 @@ import (
 	"io/ioutil"
 	"math/rand"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -120,4 +121,27 @@ func TestAddingNewIntervals(t *testing.T) {
 		testutil.Equals(t, c.exp, c.exist.add(c.new))
 	}
 	return
+}
+
+// TestMemTombstonesConcurrency to make sure they are safe to access from different goroutines.
+func TestMemTombstonesConcurrency(t *testing.T) {
+	tomb := newMemTombstones()
+	totalRuns := 100
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	go func() {
+		for x := 0; x < totalRuns; x++ {
+			tomb.put(uint64(x), Intervals{{int64(x), int64(x)}})
+			tomb.addInterval(uint64(x), Interval{int64(x), int64(x)})
+		}
+		wg.Done()
+	}()
+	go func() {
+		for x := 0; x < totalRuns; x++ {
+			tomb.Get(uint64(x))
+		}
+		wg.Done()
+	}()
+	wg.Wait()
 }
